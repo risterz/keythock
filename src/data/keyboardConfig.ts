@@ -9,7 +9,7 @@ export interface KeyData {
   isSpecial?: boolean
 }
 
-export type RgbMode = 'rainbow' | 'ripple' | 'breathing' | 'static'
+export type RgbMode = 'rainbow' | 'ripple' | 'breathing' | 'static' | 'off'
 export type ArtisanEsc = 'standard' | 'gemstone' | 'cyber-skull'
 
 export interface Colorway {

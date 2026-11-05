@@ -129,16 +129,18 @@ function KeyboardBody({
           <meshStandardMaterial color="#0c1813" metalness={0.4} roughness={0.3} />
         </mesh>
         {/* Underglow LED strip glow */}
-        <mesh position={[0, -0.05, 0]}>
-          <boxGeometry args={[14.9, 0.05, 5.5]} />
-          <meshStandardMaterial
-            color={colorway.underglowColor}
-            emissive={colorway.underglowColor}
-            emissiveIntensity={1.5}
-            transparent
-            opacity={0.8}
-          />
-        </mesh>
+        {rgbMode !== 'off' && (
+          <mesh position={[0, -0.05, 0]}>
+            <boxGeometry args={[14.9, 0.05, 5.5]} />
+            <meshStandardMaterial
+              color={colorway.underglowColor}
+              emissive={colorway.underglowColor}
+              emissiveIntensity={1.5}
+              transparent
+              opacity={0.8}
+            />
+          </mesh>
+        )}
         {explodeAmount > 0.4 && (
           <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#10b981">
             PCB
@@ -260,7 +262,12 @@ function KeycapMesh({
     if (rgbLightRef.current) {
       const time = clock.elapsedTime
 
-      if (rgbMode === 'rainbow') {
+      if (rgbMode === 'off') {
+        rgbLightRef.current.intensity = 0
+        if (keyMatRef.current) {
+          keyMatRef.current.emissiveIntensity = 0
+        }
+      } else if (rgbMode === 'rainbow') {
         const hue = ((x + 7.5) / 15 + time * 0.3) % 1
         rgbLightRef.current.color.setHSL(hue, 1, 0.5)
         rgbLightRef.current.intensity = isPressed ? 3.5 : 1.2

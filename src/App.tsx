@@ -11,6 +11,7 @@ import {
   Layers,
   Activity,
   Sun,
+  Moon,
   Flame,
   Award,
   Play,
@@ -633,13 +634,18 @@ export default function App() {
 
           {/* RGB Dynamic Lighting Selector */}
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
-              <Sun className="w-3.5 h-3.5 text-yellow-400" />
-              Per-Key RGB Lighting
-            </h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                {rgbMode === 'off' ? <Moon className="w-3.5 h-3.5 text-gray-500" /> : <Sun className="w-3.5 h-3.5 text-yellow-400" />}
+                Per-Key RGB Lighting
+              </h2>
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${rgbMode === 'off' ? 'bg-red-500/20 text-red-300' : 'bg-cyan-500/20 text-cyan-300'}`}>
+                {rgbMode === 'off' ? 'RGB OFF' : 'ACTIVE'}
+              </span>
+            </div>
 
-            <div className="grid grid-cols-4 gap-1.5">
-              {(['ripple', 'rainbow', 'breathing', 'static'] as RgbMode[]).map((m) => {
+            <div className="grid grid-cols-5 gap-1.5">
+              {(['ripple', 'rainbow', 'breathing', 'static', 'off'] as RgbMode[]).map((m) => {
                 const isSelected = rgbMode === m
                 return (
                   <button
@@ -649,13 +655,13 @@ export default function App() {
                       e.currentTarget.blur()
                       setRgbMode(m)
                     }}
-                    className={`py-1.5 px-2 text-center rounded-lg border text-xs capitalize transition-all ${
+                    className={`py-1.5 px-1 text-center rounded-lg border text-xs capitalize transition-all ${
                       isSelected
-                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-semibold'
+                        ? (m === 'off' ? 'bg-red-500/20 border-red-500 text-red-300 font-semibold' : 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-semibold')
                         : 'bg-gray-900/40 border-gray-800/60 text-gray-400 hover:text-white'
                     }`}
                   >
-                    {m}
+                    {m === 'off' ? 'Off' : m}
                   </button>
                 )
               })}
