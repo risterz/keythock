@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text, Float } from '@react-three/drei'
 import * as THREE from 'three'
 import { Colorway, KeyboardLayoutConfig, KeyData, RgbMode, ArtisanEsc } from '../data/keyboardConfig'
+import { PlateMaterial, PLATE_MATERIALS } from '../audio/soundEngine'
 
 interface Keyboard3DProps {
   colorway: Colorway
@@ -13,6 +14,7 @@ interface Keyboard3DProps {
   artisanEsc: ArtisanEsc
   lastPressedKeyPos: { x: number; z: number; time: number } | null
   layoutConfig: KeyboardLayoutConfig
+  plateMaterial: PlateMaterial
 }
 
 export default function Keyboard3D({
@@ -23,7 +25,8 @@ export default function Keyboard3D({
   rgbMode,
   artisanEsc,
   lastPressedKeyPos,
-  layoutConfig
+  layoutConfig,
+  plateMaterial
 }: Keyboard3DProps) {
   return (
     <div className="w-full h-full relative">
@@ -54,6 +57,7 @@ export default function Keyboard3D({
             artisanEsc={artisanEsc}
             lastPressedKeyPos={lastPressedKeyPos}
             layoutConfig={layoutConfig}
+            plateMaterial={plateMaterial}
           />
         </Float>
 
@@ -84,11 +88,13 @@ function KeyboardBody({
   rgbMode,
   artisanEsc,
   lastPressedKeyPos,
-  layoutConfig
+  layoutConfig,
+  plateMaterial
 }: Keyboard3DProps) {
   const keyPositions = layoutConfig.positions
   const { caseWidth, caseDepth } = layoutConfig
   const labelX = -caseWidth / 2 - 1.2
+  const currentPlate = PLATE_MATERIALS[plateMaterial] || PLATE_MATERIALS['fr4']
 
   // Interpolated heights for exploded teardown
   const keycapsY = explodeAmount * 2.6
@@ -156,15 +162,21 @@ function KeyboardBody({
         )}
       </group>
 
-      {/* 4. SOLID BRASS SWITCH PLATE */}
+      {/* 4. SWITCH PLATE (Dynamic Material) */}
       <group position={[0, plateY, 0]}>
-        <mesh key={'mesh-plate-' + layoutConfig.id}>
+        <mesh key={'mesh-plate-' + layoutConfig.id + '-' + plateMaterial}>
           <boxGeometry key={'geom-plate-' + layoutConfig.id} args={[caseWidth - 0.6, 0.05, caseDepth - 0.6]} />
-          <meshStandardMaterial color="#c59b27" metalness={0.92} roughness={0.25} />
+          <meshStandardMaterial
+            color={currentPlate.color}
+            metalness={currentPlate.metalness}
+            roughness={currentPlate.roughness}
+            transparent={!!currentPlate.transparent}
+            opacity={currentPlate.opacity ?? 1}
+          />
         </mesh>
         {explodeAmount > 0.4 && (
           <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#f59e0b">
-            BRASS PLATE
+            {currentPlate.shortLabel.toUpperCase()} PLATE
           </Text>
         )}
       </group>

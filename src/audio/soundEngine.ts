@@ -3,6 +3,7 @@
 
 export type SwitchType = 'holy-panda' | 'gateron-yellow' | 'cherry-blue' | 'oil-king' | 'topre'
 export type AcousticMod = 'stock' | 'tape-mod' | 'pe-foam'
+export type PlateMaterial = 'polycarbonate' | 'pom' | 'fr4' | 'aluminum' | 'brass'
 
 export interface SwitchProfile {
   id: SwitchType
@@ -13,6 +14,94 @@ export interface SwitchProfile {
   baseFreq: number
   clickSharpness: number
   thockDepth: number
+}
+
+export interface PlateProfile {
+  id: PlateMaterial
+  name: string
+  shortLabel: string
+  tag: string
+  description: string
+  color: string
+  metalness: number
+  roughness: number
+  transmission?: number
+  opacity?: number
+  transparent?: boolean
+  freqMultiplier: number
+  filterMultiplier: number
+  clickMultiplier: number
+}
+
+export const PLATE_MATERIALS: Record<PlateMaterial, PlateProfile> = {
+  'polycarbonate': {
+    id: 'polycarbonate',
+    name: 'Polycarbonate (PC)',
+    shortLabel: 'PC Flex',
+    tag: 'Deep Thock',
+    description: 'Soft flexible polymer plate. Dampens high frequencies to produce a warm, deep acoustic thock.',
+    color: '#e2e8f0',
+    metalness: 0.05,
+    roughness: 0.35,
+    transmission: 0.65,
+    opacity: 0.75,
+    transparent: true,
+    freqMultiplier: 0.88,
+    filterMultiplier: 0.82,
+    clickMultiplier: 0.75
+  },
+  'pom': {
+    id: 'pom',
+    name: 'POM (Acetal)',
+    shortLabel: 'POM',
+    tag: 'Creamy Pop',
+    description: 'Self-lubricating polymer plate delivering a smooth, creamy, and distinct poppy bottom-out.',
+    color: '#f8fafc',
+    metalness: 0.05,
+    roughness: 0.25,
+    freqMultiplier: 1.02,
+    filterMultiplier: 1.05,
+    clickMultiplier: 1.08
+  },
+  'fr4': {
+    id: 'fr4',
+    name: 'FR4 Fiberglass',
+    shortLabel: 'FR4',
+    tag: 'Balanced Full',
+    description: 'PCB-grade fiberglass composite. The enthusiast favorite for balanced, rich acoustic feedback.',
+    color: '#1a1f1c',
+    metalness: 0.35,
+    roughness: 0.55,
+    freqMultiplier: 1.0,
+    filterMultiplier: 1.0,
+    clickMultiplier: 1.0
+  },
+  'aluminum': {
+    id: 'aluminum',
+    name: 'Anodized Aluminum',
+    shortLabel: 'Aluminum',
+    tag: 'Crisp Clack',
+    description: 'Stiff metal plate delivering an energetic, crisp, and high-frequency mechanical clack.',
+    color: '#94a3b8',
+    metalness: 0.88,
+    roughness: 0.3,
+    freqMultiplier: 1.15,
+    filterMultiplier: 1.2,
+    clickMultiplier: 1.25
+  },
+  'brass': {
+    id: 'brass',
+    name: 'Solid Brass',
+    shortLabel: 'Brass',
+    tag: 'Bright Ping',
+    description: 'Heavy, rigid brass producing loud, clear, high-pitched mechanical acoustics with metallic clack.',
+    color: '#c59b27',
+    metalness: 0.95,
+    roughness: 0.2,
+    freqMultiplier: 1.26,
+    filterMultiplier: 1.35,
+    clickMultiplier: 1.45
+  }
 }
 
 export const SWITCH_PROFILES: Record<SwitchType, SwitchProfile> = {
@@ -103,13 +192,15 @@ class SoundEngine {
     switchType: SwitchType,
     volume = 0.85,
     isSpacebar = false,
-    mod: AcousticMod = 'stock'
+    mod: AcousticMod = 'stock',
+    plate: PlateMaterial = 'fr4'
   ) {
     this.initCtx()
     if (!this.ctx) return
 
     const now = this.ctx.currentTime
     const profile = SWITCH_PROFILES[switchType]
+    const plateProfile = PLATE_MATERIALS[plate] || PLATE_MATERIALS['fr4']
     const pitchMod = isSpacebar ? 0.65 : 0.96 + Math.random() * 0.08
 
     // 1. Bottom-Out Thock Resonance (Low Frequency Body)
@@ -119,9 +210,9 @@ class SoundEngine {
 
     osc.type = isSpacebar ? 'triangle' : 'sine'
 
-    // Adjust frequencies based on acoustic foam / tape mods
-    let baseFreq = profile.baseFreq * pitchMod
-    let filterCutoff = isSpacebar ? 450 : 800
+    // Adjust frequencies based on acoustic foam / tape mods and plate material
+    let baseFreq = profile.baseFreq * pitchMod * plateProfile.freqMultiplier
+    let filterCutoff = (isSpacebar ? 450 : 800) * plateProfile.filterMultiplier
     let duration = isSpacebar ? 0.12 : 0.07
 
     if (mod === 'tape-mod') {
@@ -168,7 +259,7 @@ class SoundEngine {
     const noiseFilter = this.ctx.createBiquadFilter()
     noiseFilter.type = profile.clickSharpness > 0.6 ? 'highpass' : 'bandpass'
 
-    let clickFreq = profile.clickSharpness > 0.6 ? 2400 : 1200 + profile.clickSharpness * 800
+    let clickFreq = (profile.clickSharpness > 0.6 ? 2400 : 1200 + profile.clickSharpness * 800) * plateProfile.clickMultiplier
     if (mod === 'tape-mod') clickFreq *= 0.8
     if (mod === 'pe-foam') clickFreq *= 1.25
 

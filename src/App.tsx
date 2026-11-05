@@ -23,7 +23,9 @@ import {
   SWITCH_PROFILES,
   SwitchType,
   ACOUSTIC_MODS,
-  AcousticMod
+  AcousticMod,
+  PlateMaterial,
+  PLATE_MATERIALS
 } from './audio/soundEngine'
 import {
   COLORWAYS,
@@ -46,6 +48,7 @@ export default function App() {
   // Config state
   const [activeSwitch, setActiveSwitch] = useState<SwitchType>('holy-panda')
   const [activeMod, setActiveMod] = useState<AcousticMod>('pe-foam')
+  const [activePlate, setActivePlate] = useState<PlateMaterial>('fr4')
   const [activeColorway, setActiveColorway] = useState<Colorway>(COLORWAYS[0])
   const [rgbMode, setRgbMode] = useState<RgbMode>('ripple')
   const [artisanEsc, setArtisanEsc] = useState<ArtisanEsc>('gemstone')
@@ -89,9 +92,9 @@ export default function App() {
 
     const isSpace = keyData?.code === 'Space' || keyChar === ' '
 
-    // Play switch sound with active acoustics mod
+    // Play switch sound with active acoustics mod and plate material
     if (!isMuted) {
-      soundEngine.playSwitch(activeSwitch, volume, isSpace, activeMod)
+      soundEngine.playSwitch(activeSwitch, volume, isSpace, activeMod, activePlate)
     }
 
     if (keyData) {
@@ -104,7 +107,7 @@ export default function App() {
         })
       }
     }
-  }, [activeSwitch, volume, isMuted, activeMod, currentLayoutConfig])
+  }, [activeSwitch, volume, isMuted, activeMod, activePlate, currentLayoutConfig])
 
   // Hardware keyboard events
   useEffect(() => {
@@ -330,6 +333,7 @@ export default function App() {
 
   const currentSwitch = SWITCH_PROFILES[activeSwitch]
   const currentMod = ACOUSTIC_MODS[activeMod]
+  const currentPlate = PLATE_MATERIALS[activePlate]
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#07090e] text-gray-100 overflow-hidden select-none">
@@ -437,6 +441,7 @@ export default function App() {
             artisanEsc={artisanEsc}
             lastPressedKeyPos={lastPressedKeyPos}
             layoutConfig={currentLayoutConfig}
+            plateMaterial={activePlate}
           />
 
           {/* Sandbox Typing Stream Overlay */}
@@ -678,6 +683,49 @@ export default function App() {
               })}
             </div>
             <p className="text-[11px] text-gray-500 mt-1.5 leading-snug">{currentMod.description}</p>
+          </div>
+
+          {/* Switch Plate Material Configurator */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-amber-400" />
+                Switch Plate Material
+              </h2>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                {currentPlate.tag}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-5 gap-1">
+              {(Object.keys(PLATE_MATERIALS) as PlateMaterial[]).map((p) => {
+                const isSelected = activePlate === p
+                const mat = PLATE_MATERIALS[p]
+                return (
+                  <button
+                    key={p}
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
+                      setActivePlate(p)
+                      soundEngine.playSwitch(activeSwitch, volume, false, activeMod, p)
+                    }}
+                    className={`py-2 px-1 text-center rounded-xl border transition-all flex flex-col items-center gap-1 ${
+                      isSelected
+                        ? 'bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-sm shadow-amber-500/10'
+                        : 'bg-gray-900/40 border-gray-800/60 text-gray-400 hover:text-white hover:bg-gray-900/80'
+                    }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full border border-black/40 shadow-sm"
+                      style={{ backgroundColor: mat.color }}
+                    />
+                    <span className="text-[10px] font-semibold leading-none">{mat.shortLabel}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1.5 leading-snug">{currentPlate.description}</p>
           </div>
 
           {/* RGB Dynamic Lighting Selector */}
