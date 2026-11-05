@@ -9,6 +9,9 @@ export interface KeyData {
   isSpecial?: boolean
 }
 
+export type RgbMode = 'rainbow' | 'ripple' | 'breathing' | 'static'
+export type ArtisanEsc = 'standard' | 'gemstone' | 'cyber-skull'
+
 export interface Colorway {
   id: string
   name: string
@@ -89,6 +92,13 @@ export const COLORWAYS: Colorway[] = [
     accentText: '#ffffff',
     underglowColor: '#fb8500'
   }
+]
+
+export const TYPING_TEST_PARAGRAPHS = [
+  "The quick brown fox jumps over the lazy dog while mechanical switches clack in rhythm.",
+  "Custom mechanical keyboards combine tactile feel, acoustics, and engineering into one desk centerpiece.",
+  "Lubed linear switches with poron gaskets and brass plates produce the deep thock sound enthusiasts adore.",
+  "High quality keycaps molded with thick PBT plastic resist shine and deliver crisp acoustic resonance."
 ]
 
 // 60% Compact Keyboard Layout Matrix
