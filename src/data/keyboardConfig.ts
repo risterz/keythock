@@ -129,18 +129,21 @@ export interface KeyboardLayoutConfig {
   codeMap: Map<string, KeyData>
 }
 
-// Compute accurate 3D positions for a specific layout
+// Compute accurate 3D positions and exact matching case bounds for any layout
 export function computeLayoutPositions(
   keys: KeyData[],
-  startX: number,
   rowZOffsets: number[]
-): Key3DPosition[] {
-  const positions: Key3DPosition[] = []
+): {
+  positions: Key3DPosition[]
+  caseWidth: number
+  caseDepth: number
+} {
+  const rawPositions: Key3DPosition[] = []
   const maxRow = Math.max(...keys.map(k => k.row))
 
   for (let r = 0; r <= maxRow; r++) {
     const keysInRow = keys.filter(k => k.row === r).sort((a, b) => a.col - b.col)
-    let currentX = startX
+    let currentX = 0
 
     keysInRow.forEach(k => {
       if (k.gapBefore) {
@@ -148,7 +151,7 @@ export function computeLayoutPositions(
       }
       const keyWidth = k.width * UNIT_SIZE + (k.width - 1) * KEY_GAP
       const posX = currentX + keyWidth / 2
-      positions.push({
+      rawPositions.push({
         key: k,
         x: posX,
         z: rowZOffsets[r] || 0,
@@ -158,7 +161,46 @@ export function computeLayoutPositions(
     })
   }
 
-  return positions
+  // Find exact bounding box across all keycaps
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+
+  rawPositions.forEach(p => {
+    const left = p.x - p.width / 2
+    const right = p.x + p.width / 2
+    const top = p.z - UNIT_SIZE / 2
+    const bottom = p.z + UNIT_SIZE / 2
+    if (left < minX) minX = left
+    if (right > maxX) maxX = right
+    if (top < minZ) minZ = top
+    if (bottom > maxZ) maxZ = bottom
+  })
+
+  const centerX = (minX + maxX) / 2
+  const centerZ = (minZ + maxZ) / 2
+  const keyboardWidth = maxX - minX
+  const keyboardDepth = maxZ - minZ
+
+  // Center every keycap perfectly around coordinate (0, 0)
+  const centeredPositions = rawPositions.map(p => ({
+    ...p,
+    x: parseFloat((p.x - centerX).toFixed(4)),
+    z: parseFloat((p.z - centerZ).toFixed(4))
+  }))
+
+  // Symmetrical bezel margin around keycap boundary
+  const bezelX = 0.52
+  const bezelZ = 0.48
+  const caseWidth = parseFloat((keyboardWidth + bezelX * 2).toFixed(2))
+  const caseDepth = parseFloat((keyboardDepth + bezelZ * 2).toFixed(2))
+
+  return {
+    positions: centeredPositions,
+    caseWidth,
+    caseDepth
+  }
 }
 
 // -------------------------------------------------------------
@@ -485,16 +527,17 @@ const LAYOUT_75_KEYS: KeyData[] = [
   { id: 'ArrowUp', code: 'ArrowUp', label: '▲', width: 1, row: 4, col: 12, isSpecial: true },
   { id: 'End', code: 'End', label: 'END', width: 1, row: 4, col: 13, isModifier: true },
 
-  // Row 5
+  // Row 5 (16.0u total: 3.75u left mods + 6.25u space + 3.0u right mods + 3.0u arrows)
   { id: 'ControlLeft', code: 'ControlLeft', label: 'CTRL', width: 1.25, row: 5, col: 0, isModifier: true },
   { id: 'MetaLeft', code: 'MetaLeft', label: 'WIN', width: 1.25, row: 5, col: 1, isModifier: true },
   { id: 'AltLeft', code: 'AltLeft', label: 'ALT', width: 1.25, row: 5, col: 2, isModifier: true },
   { id: 'Space', code: 'Space', label: '', width: 6.25, row: 5, col: 3, isSpecial: true },
-  { id: 'AltRight', code: 'AltRight', label: 'ALT', width: 1.25, row: 5, col: 4, isModifier: true },
-  { id: 'MetaRight', code: 'MetaRight', label: 'FN', width: 1.25, row: 5, col: 5, isModifier: true },
-  { id: 'ArrowLeft', code: 'ArrowLeft', label: '◀', width: 1, row: 5, col: 6, isSpecial: true },
-  { id: 'ArrowDown', code: 'ArrowDown', label: '▼', width: 1, row: 5, col: 7, isSpecial: true },
-  { id: 'ArrowRight', code: 'ArrowRight', label: '▶', width: 1, row: 5, col: 8, isSpecial: true }
+  { id: 'AltRight', code: 'AltRight', label: 'ALT', width: 1.0, row: 5, col: 4, isModifier: true },
+  { id: 'MetaRight', code: 'MetaRight', label: 'FN', width: 1.0, row: 5, col: 5, isModifier: true },
+  { id: 'ControlRight', code: 'ControlRight', label: 'CTRL', width: 1.0, row: 5, col: 6, isModifier: true },
+  { id: 'ArrowLeft', code: 'ArrowLeft', label: '◀', width: 1.0, row: 5, col: 7, isSpecial: true },
+  { id: 'ArrowDown', code: 'ArrowDown', label: '▼', width: 1.0, row: 5, col: 8, isSpecial: true },
+  { id: 'ArrowRight', code: 'ArrowRight', label: '▶', width: 1.0, row: 5, col: 9, isSpecial: true }
 ]
 
 // -------------------------------------------------------------
@@ -606,14 +649,11 @@ function createLayoutConfig(
   shortLabel: string,
   keysCount: number,
   tagline: string,
-  caseWidth: number,
-  caseDepth: number,
   cameraZ: number,
-  startX: number,
   rowZOffsets: number[],
   keys: KeyData[]
 ): KeyboardLayoutConfig {
-  const positions = computeLayoutPositions(keys, startX, rowZOffsets)
+  const { positions, caseWidth, caseDepth } = computeLayoutPositions(keys, rowZOffsets)
   const positionMap = new Map<string, Key3DPosition>()
   const codeMap = new Map<string, KeyData>()
 
@@ -650,10 +690,7 @@ export const KEYBOARD_LAYOUTS: Record<KeyboardLayoutType, KeyboardLayoutConfig> 
     '60%',
     61,
     'Ultra-compact 61-key minimalist layout. Maximum mouse clearance.',
-    15.2,
-    5.8,
     13,
-    -7.0,
     [-2.1, -1.05, 0, 1.05, 2.1],
     LAYOUT_60_KEYS
   ),
@@ -663,10 +700,7 @@ export const KEYBOARD_LAYOUTS: Record<KeyboardLayoutType, KeyboardLayoutConfig> 
     '64%',
     64,
     'Enthusiast 64-key with dedicated arrow keys and delete in a 60% chassis.',
-    15.2,
-    5.8,
     13,
-    -7.0,
     [-2.1, -1.05, 0, 1.05, 2.1],
     LAYOUT_64_KEYS
   ),
@@ -676,10 +710,7 @@ export const KEYBOARD_LAYOUTS: Record<KeyboardLayoutType, KeyboardLayoutConfig> 
     '65%',
     68,
     'Dedicated arrow keys with vertical navigation column (Del, PgUp, PgDn).',
-    16.2,
-    5.8,
     13.5,
-    -7.5,
     [-2.1, -1.05, 0, 1.05, 2.1],
     LAYOUT_65_KEYS
   ),
@@ -689,11 +720,8 @@ export const KEYBOARD_LAYOUTS: Record<KeyboardLayoutType, KeyboardLayoutConfig> 
     '75%',
     84,
     'Dedicated F-row (F1-F12) + arrow cluster + nav column in a condensed footprint.',
-    16.2,
-    6.9,
-    14.2,
-    -7.5,
-    [-2.65, -1.6, -0.55, 0.5, 1.55, 2.6],
+    14.5,
+    [-2.625, -1.575, -0.525, 0.525, 1.575, 2.625],
     LAYOUT_75_KEYS
   ),
   'tkl': createLayoutConfig(
@@ -702,11 +730,8 @@ export const KEYBOARD_LAYOUTS: Record<KeyboardLayoutType, KeyboardLayoutConfig> 
     '80% TKL',
     87,
     'Esports tournament standard. Full F-row, separated nav island and arrow cluster.',
-    18.8,
-    6.9,
     15.5,
-    -8.7,
-    [-2.65, -1.6, -0.55, 0.5, 1.55, 2.6],
+    [-2.625, -1.575, -0.525, 0.525, 1.575, 2.625],
     LAYOUT_TKL_KEYS
   )
 }

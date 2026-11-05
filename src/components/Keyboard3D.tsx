@@ -28,6 +28,7 @@ export default function Keyboard3D({
   return (
     <div className="w-full h-full relative">
       <Canvas
+        key={'canvas-' + layoutConfig.id}
         camera={{ position: [0, 11, layoutConfig.cameraZ || 13], fov: 40 }}
         shadows
         gl={{ antialias: true, alpha: true }}
@@ -44,6 +45,7 @@ export default function Keyboard3D({
 
         <Float speed={explodeAmount > 0.1 ? 0 : 1.2} rotationIntensity={0.15} floatIntensity={0.2}>
           <KeyboardBody
+            key={'body-' + layoutConfig.id}
             colorway={colorway}
             activeKeys={activeKeys}
             onKeyPress={onKeyPress}
@@ -100,8 +102,8 @@ function KeyboardBody({
     <group position={[0, 0, 0]} rotation={[0.15, 0, 0]}>
       {/* 1. CNC ALUMINUM CASE (Bottom Layer) */}
       <group position={[0, caseY, 0]}>
-        <mesh receiveShadow castShadow>
-          <boxGeometry args={[caseWidth, 0.7, caseDepth]} />
+        <mesh receiveShadow castShadow key={'mesh-case-' + layoutConfig.id}>
+          <boxGeometry key={'geom-case-' + layoutConfig.id} args={[caseWidth, 0.7, caseDepth]} />
           <meshStandardMaterial
             color={colorway.caseColor}
             metalness={colorway.caseMaterial === 'metal' ? 0.85 : 0.25}
@@ -117,8 +119,8 @@ function KeyboardBody({
 
       {/* 2. PORON SOUND DAMPENING FOAM */}
       <group position={[0, foamY, 0]}>
-        <mesh>
-          <boxGeometry args={[caseWidth - 0.6, 0.1, caseDepth - 0.6]} />
+        <mesh key={'mesh-foam-' + layoutConfig.id}>
+          <boxGeometry key={'geom-foam-' + layoutConfig.id} args={[caseWidth - 0.6, 0.1, caseDepth - 0.6]} />
           <meshStandardMaterial color="#1a1c23" roughness={0.9} />
         </mesh>
         {explodeAmount > 0.4 && (
@@ -130,14 +132,14 @@ function KeyboardBody({
 
       {/* 3. MULTI-LAYER PCB WITH TRACES */}
       <group position={[0, pcbY, 0]}>
-        <mesh>
-          <boxGeometry args={[caseWidth - 0.5, 0.08, caseDepth - 0.5]} />
+        <mesh key={'mesh-pcb-' + layoutConfig.id}>
+          <boxGeometry key={'geom-pcb-' + layoutConfig.id} args={[caseWidth - 0.5, 0.08, caseDepth - 0.5]} />
           <meshStandardMaterial color="#0c1813" metalness={0.4} roughness={0.3} />
         </mesh>
         {/* Underglow LED strip glow */}
         {rgbMode !== 'off' && (
-          <mesh position={[0, -0.05, 0]}>
-            <boxGeometry args={[caseWidth - 0.3, 0.05, caseDepth - 0.3]} />
+          <mesh position={[0, -0.05, 0]} key={'mesh-underglow-' + layoutConfig.id}>
+            <boxGeometry key={'geom-underglow-' + layoutConfig.id} args={[caseWidth - 0.3, 0.05, caseDepth - 0.3]} />
             <meshStandardMaterial
               color={colorway.underglowColor}
               emissive={colorway.underglowColor}
@@ -156,8 +158,8 @@ function KeyboardBody({
 
       {/* 4. SOLID BRASS SWITCH PLATE */}
       <group position={[0, plateY, 0]}>
-        <mesh>
-          <boxGeometry args={[caseWidth - 0.6, 0.05, caseDepth - 0.6]} />
+        <mesh key={'mesh-plate-' + layoutConfig.id}>
+          <boxGeometry key={'geom-plate-' + layoutConfig.id} args={[caseWidth - 0.6, 0.05, caseDepth - 0.6]} />
           <meshStandardMaterial color="#c59b27" metalness={0.92} roughness={0.25} />
         </mesh>
         {explodeAmount > 0.4 && (
@@ -170,7 +172,7 @@ function KeyboardBody({
       {/* 5. INDIVIDUAL SWITCH HOUSINGS */}
       <group position={[0, switchesY, 0]}>
         {keyPositions.map(({ key, x, z }) => (
-          <mesh key={'sw-' + key.id} position={[x, 0.05, z]}>
+          <mesh key={'sw-' + key.id + '-' + layoutConfig.id} position={[x, 0.05, z]}>
             <boxGeometry args={[0.75, 0.35, 0.75]} />
             <meshStandardMaterial color="#2d2d38" roughness={0.5} />
           </mesh>
@@ -186,7 +188,7 @@ function KeyboardBody({
       <group position={[0, keycapsY, 0]}>
         {keyPositions.map(({ key, x, z, width }) => (
           <KeycapMesh
-            key={key.id}
+            key={'kc-' + key.id + '-' + layoutConfig.id}
             keyData={key}
             x={x}
             z={z}
