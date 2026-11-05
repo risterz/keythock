@@ -32,11 +32,17 @@ import {
   RgbMode,
   ArtisanEsc,
   TYPING_TEST_PARAGRAPHS,
-  KEY_POSITION_MAP,
+  KeyboardLayoutType,
+  KEYBOARD_LAYOUTS,
+  LAYOUT_TYPES,
   findKeyData
 } from './data/keyboardConfig'
 
 export default function App() {
+  // Layout Form Factor state (60%, 64%, 65%, 75%, TKL 80%)
+  const [layoutType, setLayoutType] = useState<KeyboardLayoutType>('64')
+  const currentLayoutConfig = KEYBOARD_LAYOUTS[layoutType]
+
   // Config state
   const [activeSwitch, setActiveSwitch] = useState<SwitchType>('holy-panda')
   const [activeMod, setActiveMod] = useState<AcousticMod>('pe-foam')
@@ -89,7 +95,7 @@ export default function App() {
     }
 
     if (keyData) {
-      const pos = KEY_POSITION_MAP.get(keyData.code) || KEY_POSITION_MAP.get(keyData.id)
+      const pos = currentLayoutConfig.positionMap.get(keyData.code) || currentLayoutConfig.positionMap.get(keyData.id)
       if (pos) {
         setLastPressedKeyPos({
           x: pos.x,
@@ -98,7 +104,7 @@ export default function App() {
         })
       }
     }
-  }, [activeSwitch, volume, isMuted, activeMod])
+  }, [activeSwitch, volume, isMuted, activeMod, currentLayoutConfig])
 
   // Hardware keyboard events
   useEffect(() => {
@@ -115,7 +121,7 @@ export default function App() {
 
       if (e.repeat) return
 
-      const keyData = findKeyData(e.code, e.key)
+      const keyData = findKeyData(e.code, e.key, currentLayoutConfig)
       const targetCode = keyData ? keyData.code : e.code
 
       // Visual actuation tracking with minimum dwell time
@@ -195,7 +201,7 @@ export default function App() {
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const keyData = findKeyData(e.code, e.key)
+      const keyData = findKeyData(e.code, e.key, currentLayoutConfig)
       const targetCode = keyData ? keyData.code : e.code
 
       const pressedAt = activeKeyPressTimes.current.get(targetCode) || 0
@@ -228,7 +234,7 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [handleKeystrokeAction, mode, volume])
+  }, [handleKeystrokeAction, mode, volume, currentLayoutConfig])
 
   // Click on 3D keycap
   const handle3DKeyClick = (key: KeyData) => {
@@ -430,6 +436,7 @@ export default function App() {
             rgbMode={rgbMode}
             artisanEsc={artisanEsc}
             lastPressedKeyPos={lastPressedKeyPos}
+            layoutConfig={currentLayoutConfig}
           />
 
           {/* Sandbox Typing Stream Overlay */}
@@ -548,6 +555,47 @@ export default function App() {
 
         {/* Right Configurator Sidebar */}
         <aside className="w-full md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-gray-800/80 bg-gray-950/95 backdrop-blur-xl p-5 overflow-y-auto space-y-5 z-10 flex-shrink-0">
+          {/* Keyboard Form Factor Selector (60%, 64%, 65%, 75%, TKL) */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                <KeyboardIcon className="w-3.5 h-3.5 text-cyan-400" />
+                Keyboard Layout
+              </h2>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300">
+                {currentLayoutConfig.keysCount} Keys
+              </span>
+            </div>
+
+            <div className="grid grid-cols-5 gap-1.5">
+              {LAYOUT_TYPES.map((lt) => {
+                const cfg = KEYBOARD_LAYOUTS[lt]
+                const isSelected = layoutType === lt
+                return (
+                  <button
+                    key={lt}
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
+                      setLayoutType(lt)
+                    }}
+                    className={`py-2 px-1 text-center rounded-xl border transition-all flex flex-col items-center justify-center ${
+                      isSelected
+                        ? 'bg-gradient-to-b from-cyan-500/25 to-cyan-500/10 border-cyan-500 text-cyan-300 font-bold shadow-md shadow-cyan-500/20'
+                        : 'bg-gray-900/40 border-gray-800/60 text-gray-400 hover:text-white hover:bg-gray-900/80'
+                    }`}
+                  >
+                    <span className="text-[11px] font-bold leading-tight">{cfg.shortLabel}</span>
+                    <span className="text-[9px] text-gray-400 opacity-75">{cfg.keysCount}k</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-2 leading-snug">
+              <span className="text-cyan-400 font-semibold">{currentLayoutConfig.name}:</span> {currentLayoutConfig.tagline}
+            </p>
+          </div>
+
           {/* Switch Acoustics Selector */}
           <div>
             <div className="flex items-center justify-between mb-2">

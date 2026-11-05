@@ -2,7 +2,7 @@ import { useRef, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text, Float } from '@react-three/drei'
 import * as THREE from 'three'
-import { Colorway, KEY_3D_POSITIONS, KeyData, RgbMode, ArtisanEsc } from '../data/keyboardConfig'
+import { Colorway, KeyboardLayoutConfig, KeyData, RgbMode, ArtisanEsc } from '../data/keyboardConfig'
 
 interface Keyboard3DProps {
   colorway: Colorway
@@ -12,6 +12,7 @@ interface Keyboard3DProps {
   rgbMode: RgbMode
   artisanEsc: ArtisanEsc
   lastPressedKeyPos: { x: number; z: number; time: number } | null
+  layoutConfig: KeyboardLayoutConfig
 }
 
 export default function Keyboard3D({
@@ -21,12 +22,13 @@ export default function Keyboard3D({
   explodeAmount,
   rgbMode,
   artisanEsc,
-  lastPressedKeyPos
+  lastPressedKeyPos,
+  layoutConfig
 }: Keyboard3DProps) {
   return (
     <div className="w-full h-full relative">
       <Canvas
-        camera={{ position: [0, 11, 13], fov: 40 }}
+        camera={{ position: [0, 11, layoutConfig.cameraZ || 13], fov: 40 }}
         shadows
         gl={{ antialias: true, alpha: true }}
       >
@@ -49,6 +51,7 @@ export default function Keyboard3D({
             rgbMode={rgbMode}
             artisanEsc={artisanEsc}
             lastPressedKeyPos={lastPressedKeyPos}
+            layoutConfig={layoutConfig}
           />
         </Float>
 
@@ -62,7 +65,7 @@ export default function Keyboard3D({
           enableDamping
           dampingFactor={0.06}
           minDistance={6}
-          maxDistance={25}
+          maxDistance={30}
           maxPolarAngle={Math.PI / 2 - 0.05}
           minPolarAngle={0.1}
         />
@@ -78,9 +81,12 @@ function KeyboardBody({
   explodeAmount,
   rgbMode,
   artisanEsc,
-  lastPressedKeyPos
+  lastPressedKeyPos,
+  layoutConfig
 }: Keyboard3DProps) {
-  const keyPositions = KEY_3D_POSITIONS
+  const keyPositions = layoutConfig.positions
+  const { caseWidth, caseDepth } = layoutConfig
+  const labelX = -caseWidth / 2 - 1.2
 
   // Interpolated heights for exploded teardown
   const keycapsY = explodeAmount * 2.6
@@ -95,7 +101,7 @@ function KeyboardBody({
       {/* 1. CNC ALUMINUM CASE (Bottom Layer) */}
       <group position={[0, caseY, 0]}>
         <mesh receiveShadow castShadow>
-          <boxGeometry args={[15.2, 0.7, 5.8]} />
+          <boxGeometry args={[caseWidth, 0.7, caseDepth]} />
           <meshStandardMaterial
             color={colorway.caseColor}
             metalness={colorway.caseMaterial === 'metal' ? 0.85 : 0.25}
@@ -103,7 +109,7 @@ function KeyboardBody({
           />
         </mesh>
         {explodeAmount > 0.4 && (
-          <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#00f5ff">
+          <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#00f5ff">
             CNC CASE
           </Text>
         )}
@@ -112,11 +118,11 @@ function KeyboardBody({
       {/* 2. PORON SOUND DAMPENING FOAM */}
       <group position={[0, foamY, 0]}>
         <mesh>
-          <boxGeometry args={[14.6, 0.1, 5.2]} />
+          <boxGeometry args={[caseWidth - 0.6, 0.1, caseDepth - 0.6]} />
           <meshStandardMaterial color="#1a1c23" roughness={0.9} />
         </mesh>
         {explodeAmount > 0.4 && (
-          <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#a855f7">
+          <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#a855f7">
             PORON FOAM
           </Text>
         )}
@@ -125,13 +131,13 @@ function KeyboardBody({
       {/* 3. MULTI-LAYER PCB WITH TRACES */}
       <group position={[0, pcbY, 0]}>
         <mesh>
-          <boxGeometry args={[14.7, 0.08, 5.3]} />
+          <boxGeometry args={[caseWidth - 0.5, 0.08, caseDepth - 0.5]} />
           <meshStandardMaterial color="#0c1813" metalness={0.4} roughness={0.3} />
         </mesh>
         {/* Underglow LED strip glow */}
         {rgbMode !== 'off' && (
           <mesh position={[0, -0.05, 0]}>
-            <boxGeometry args={[14.9, 0.05, 5.5]} />
+            <boxGeometry args={[caseWidth - 0.3, 0.05, caseDepth - 0.3]} />
             <meshStandardMaterial
               color={colorway.underglowColor}
               emissive={colorway.underglowColor}
@@ -142,7 +148,7 @@ function KeyboardBody({
           </mesh>
         )}
         {explodeAmount > 0.4 && (
-          <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#10b981">
+          <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#10b981">
             PCB
           </Text>
         )}
@@ -151,11 +157,11 @@ function KeyboardBody({
       {/* 4. SOLID BRASS SWITCH PLATE */}
       <group position={[0, plateY, 0]}>
         <mesh>
-          <boxGeometry args={[14.6, 0.05, 5.2]} />
+          <boxGeometry args={[caseWidth - 0.6, 0.05, caseDepth - 0.6]} />
           <meshStandardMaterial color="#c59b27" metalness={0.92} roughness={0.25} />
         </mesh>
         {explodeAmount > 0.4 && (
-          <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#f59e0b">
+          <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#f59e0b">
             BRASS PLATE
           </Text>
         )}
@@ -170,7 +176,7 @@ function KeyboardBody({
           </mesh>
         ))}
         {explodeAmount > 0.4 && (
-          <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#ec4899">
+          <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#ec4899">
             SWITCHES
           </Text>
         )}
@@ -194,7 +200,7 @@ function KeyboardBody({
           />
         ))}
         {explodeAmount > 0.4 && (
-          <Text position={[-8.5, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#38bdf8">
+          <Text position={[labelX, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32} color="#38bdf8">
             KEYCAPS
           </Text>
         )}
