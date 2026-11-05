@@ -2,7 +2,7 @@ import { useRef, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text, Float } from '@react-three/drei'
 import * as THREE from 'three'
-import { Colorway, KEYBOARD_LAYOUT, KeyData, RgbMode, ArtisanEsc } from '../data/keyboardConfig'
+import { Colorway, KEY_3D_POSITIONS, KeyData, RgbMode, ArtisanEsc } from '../data/keyboardConfig'
 
 interface Keyboard3DProps {
   colorway: Colorway
@@ -80,33 +80,7 @@ function KeyboardBody({
   artisanEsc,
   lastPressedKeyPos
 }: Keyboard3DProps) {
-  const unitSize = 0.92
-  const gap = 0.06
-
-  const keyPositions = useMemo(() => {
-    const positions: { key: KeyData; x: number; z: number; width: number }[] = []
-    const rows = [0, 1, 2, 3, 4]
-    const rowZOffsets = [-2.1, -1.05, 0, 1.05, 2.1]
-
-    rows.forEach(r => {
-      const keysInRow = KEYBOARD_LAYOUT.filter(k => k.row === r)
-      let currentX = -7.0
-
-      keysInRow.forEach(k => {
-        const keyWidth = k.width * unitSize + (k.width - 1) * gap
-        const posX = currentX + keyWidth / 2
-        positions.push({
-          key: k,
-          x: posX,
-          z: rowZOffsets[r],
-          width: keyWidth
-        })
-        currentX += keyWidth + gap
-      })
-    })
-
-    return positions
-  }, [unitSize, gap])
+  const keyPositions = KEY_3D_POSITIONS
 
   // Interpolated heights for exploded teardown
   const keycapsY = explodeAmount * 2.6
@@ -254,6 +228,7 @@ function KeycapMesh({
 }: KeycapMeshProps) {
   const meshRef = useRef<THREE.Group>(null)
   const rgbLightRef = useRef<THREE.PointLight>(null)
+  const keyMatRef = useRef<THREE.MeshStandardMaterial>(null)
 
   const isEsc = keyData.id === 'Escape'
   const isArtisan = isEsc && artisanEsc === 'gemstone'
@@ -288,7 +263,11 @@ function KeycapMesh({
       if (rgbMode === 'rainbow') {
         const hue = ((x + 7.5) / 15 + time * 0.3) % 1
         rgbLightRef.current.color.setHSL(hue, 1, 0.5)
-        rgbLightRef.current.intensity = isPressed ? 3.0 : 1.2
+        rgbLightRef.current.intensity = isPressed ? 3.5 : 1.2
+        if (keyMatRef.current) {
+          keyMatRef.current.emissive.setHSL(hue, 1, 0.45)
+          keyMatRef.current.emissiveIntensity = isPressed ? 0.7 : 0.15
+        }
       } else if (rgbMode === 'ripple') {
         if (lastPressedKeyPos) {
           const dx = x - lastPressedKeyPos.x
@@ -298,24 +277,56 @@ function KeycapMesh({
           const waveRadius = elapsed * 12 // speed of ripple
 
           const waveDiff = Math.abs(dist - waveRadius)
-          if (waveDiff < 1.5 && elapsed < 1.2) {
-            const intensity = Math.max(0, (1.5 - waveDiff) * (1.2 - elapsed) * 3)
-            rgbLightRef.current.intensity = Math.max(0.3, intensity * 2)
+          if (waveDiff < 1.6 && elapsed < 1.2) {
+            const intensity = Math.max(0, (1.6 - waveDiff) * (1.2 - elapsed) * 2.8)
+            rgbLightRef.current.intensity = Math.max(0.4, intensity * 2.5)
             rgbLightRef.current.color.set(colorway.underglowColor)
+            if (keyMatRef.current) {
+              keyMatRef.current.emissive.set(colorway.underglowColor)
+              keyMatRef.current.emissiveIntensity = intensity * 0.5
+            }
+          } else if (isPressed) {
+            rgbLightRef.current.intensity = 3.5
+            rgbLightRef.current.color.set(colorway.underglowColor)
+            if (keyMatRef.current) {
+              keyMatRef.current.emissive.set(colorway.underglowColor)
+              keyMatRef.current.emissiveIntensity = 0.8
+            }
           } else {
-            rgbLightRef.current.intensity = isPressed ? 2.5 : 0.2
+            rgbLightRef.current.intensity = 0.2
+            if (keyMatRef.current) {
+              keyMatRef.current.emissiveIntensity = 0
+            }
+          }
+        } else if (isPressed) {
+          rgbLightRef.current.intensity = 3.5
+          rgbLightRef.current.color.set(colorway.underglowColor)
+          if (keyMatRef.current) {
+            keyMatRef.current.emissive.set(colorway.underglowColor)
+            keyMatRef.current.emissiveIntensity = 0.8
           }
         } else {
-          rgbLightRef.current.intensity = isPressed ? 2.5 : 0.2
+          rgbLightRef.current.intensity = 0.2
+          if (keyMatRef.current) {
+            keyMatRef.current.emissiveIntensity = 0
+          }
         }
       } else if (rgbMode === 'breathing') {
         const pulse = (Math.sin(time * 2.5) + 1) / 2
-        rgbLightRef.current.intensity = 0.3 + pulse * 1.5
+        rgbLightRef.current.intensity = (isPressed ? 3.5 : 0.3) + pulse * 1.5
         rgbLightRef.current.color.set(colorway.underglowColor)
+        if (keyMatRef.current) {
+          keyMatRef.current.emissive.set(colorway.underglowColor)
+          keyMatRef.current.emissiveIntensity = isPressed ? 0.7 : 0.1 + pulse * 0.25
+        }
       } else {
         // static
-        rgbLightRef.current.intensity = isPressed ? 2.5 : 0.8
+        rgbLightRef.current.intensity = isPressed ? 3.5 : 0.8
         rgbLightRef.current.color.set(colorway.underglowColor)
+        if (keyMatRef.current) {
+          keyMatRef.current.emissive.set(colorway.underglowColor)
+          keyMatRef.current.emissiveIntensity = isPressed ? 0.7 : 0.12
+        }
       }
     }
   })
@@ -369,6 +380,7 @@ function KeycapMesh({
         <mesh castShadow receiveShadow position={[0, 0.2, 0]}>
           <boxGeometry args={[width, 0.45, 0.92]} />
           <meshStandardMaterial
+            ref={keyMatRef}
             color={isPressed ? '#ffffff' : bg}
             roughness={0.4}
             metalness={0.1}

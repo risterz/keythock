@@ -30,7 +30,9 @@ import {
   KeyData,
   RgbMode,
   ArtisanEsc,
-  TYPING_TEST_PARAGRAPHS
+  TYPING_TEST_PARAGRAPHS,
+  KEY_POSITION_MAP,
+  findKeyData
 } from './data/keyboardConfig'
 
 export default function App() {
@@ -53,13 +55,21 @@ export default function App() {
   const [wpm, setWpm] = useState<number>(0)
   const keystrokeTimestamps = useRef<number[]>([])
 
-  // Speed Test state
+  // Speed Test state & refs for race-condition-free event handling
   const [targetParagraph, setTargetParagraph] = useState<string>(TYPING_TEST_PARAGRAPHS[0])
   const [testInput, setTestInput] = useState<string>('')
   const [testStartTime, setTestStartTime] = useState<number | null>(null)
   const [testCompleted, setTestCompleted] = useState<boolean>(false)
   const [testStats, setTestStats] = useState<{ wpm: number; accuracy: number; time: number } | null>(null)
   const [errorCount, setErrorCount] = useState<number>(0)
+
+  const testInputRef = useRef<string>('')
+  const targetParagraphRef = useRef<string>(TYPING_TEST_PARAGRAPHS[0])
+  const testStartTimeRef = useRef<number | null>(null)
+  const testCompletedRef = useRef<boolean>(false)
+  const errorCountRef = useRef<number>(0)
+  const activeKeyPressTimes = useRef<Map<string, number>>(new Map())
+  const activeKeyReleaseTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   // Register physical or on-screen keystroke
   const handleKeystrokeAction = useCallback((keyData?: KeyData, keyChar?: string) => {
@@ -78,63 +88,203 @@ export default function App() {
     }
 
     if (keyData) {
-      setLastPressedKeyPos({
-        x: (keyData.col - 7) * 0.95,
-        z: (keyData.row - 2) * 1.05,
-        time: now
-      })
+      const pos = KEY_POSITION_MAP.get(keyData.code) || KEY_POSITION_MAP.get(keyData.id)
+      if (pos) {
+        setLastPressedKeyPos({
+          x: pos.x,
+          z: pos.z,
+          time: now
+        })
+      }
     }
   }, [activeSwitch, volume, isMuted, activeMod])
 
   // Hardware keyboard events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent browser default actions (space scroll/button click, tab jump, backspace history)
+      if (['Space', 'Tab'].includes(e.code) || e.key === ' ' || (e.code === 'Backspace' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName))) {
+        e.preventDefault()
+      }
+
+      // Defocus any active HTML button so Space never triggers an accidental button click
+      if (document.activeElement instanceof HTMLElement && document.activeElement.tagName === 'BUTTON') {
+        document.activeElement.blur()
+      }
+
       if (e.repeat) return
+
+      const keyData = findKeyData(e.code, e.key)
+      const targetCode = keyData ? keyData.code : e.code
+
+      // Visual actuation tracking with minimum dwell time
+      activeKeyPressTimes.current.set(targetCode, Date.now())
+      const pendingTimer = activeKeyReleaseTimeouts.current.get(targetCode)
+      if (pendingTimer) {
+        clearTimeout(pendingTimer)
+        activeKeyReleaseTimeouts.current.delete(targetCode)
+      }
 
       setActiveKeys(prev => {
         const next = new Set(prev)
-        next.add(e.code)
+        next.add(targetCode)
         return next
       })
 
-      handleKeystrokeAction(undefined, e.key)
+      handleKeystrokeAction(keyData, e.key)
 
       // Handle Sandbox Buffer
       if (mode === 'sandbox') {
-        if (e.key.length === 1) {
-          setTypedBuffer(h => (h + e.key).slice(-45))
-        } else if (e.code === 'Backspace') {
+        if (e.key === 'Backspace') {
           setTypedBuffer(h => h.slice(0, -1))
+        } else if (e.key === ' ') {
+          setTypedBuffer(h => (h + ' ').slice(-45))
+        } else if (e.key.length === 1) {
+          setTypedBuffer(h => (h + e.key).slice(-45))
         }
       }
 
       // Handle Speed Test Input
-      if (mode === 'speedtest' && !testCompleted) {
-        if (!testStartTime) {
-          setTestStartTime(Date.now())
+      if (mode === 'speedtest' && !testCompletedRef.current) {
+        if (!testStartTimeRef.current) {
+          const now = Date.now()
+          testStartTimeRef.current = now
+          setTestStartTime(now)
         }
 
         if (e.key === 'Backspace') {
-          setTestInput(prev => prev.slice(0, -1))
+          testInputRef.current = testInputRef.current.slice(0, -1)
+          setTestInput(testInputRef.current)
         } else if (e.key.length === 1) {
-          const nextIndex = testInput.length
-          const expectedChar = targetParagraph[nextIndex]
+          const target = targetParagraphRef.current
+          const currentInput = testInputRef.current
 
-          if (e.key !== expectedChar) {
-            setErrorCount(c => c + 1)
+          if (currentInput.length < target.length) {
+            const expectedChar = target[currentInput.length]
+            if (e.key !== expectedChar) {
+              errorCountRef.current += 1
+              setErrorCount(errorCountRef.current)
+              soundEngine.playErrorSound(volume)
+            }
+
+            const nextInput = currentInput + e.key
+            testInputRef.current = nextInput
+            setTestInput(nextInput)
+
+            // Completed test!
+            if (nextInput.length >= target.length) {
+              const timeTaken = Math.max(0.2, (Date.now() - (testStartTimeRef.current || Date.now())) / 1000)
+              const words = target.split(' ').length
+              const finalWpm = Math.max(1, Math.round((words / timeTaken) * 60))
+              const accuracy = Math.max(0, Math.round(((target.length - errorCountRef.current) / target.length) * 100))
+
+              testCompletedRef.current = true
+              setTestStats({ wpm: finalWpm, accuracy, time: parseFloat(timeTaken.toFixed(1)) })
+              setTestCompleted(true)
+
+              confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+              })
+            }
+          }
+        }
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const keyData = findKeyData(e.code, e.key)
+      const targetCode = keyData ? keyData.code : e.code
+
+      const pressedAt = activeKeyPressTimes.current.get(targetCode) || 0
+      const elapsed = Date.now() - pressedAt
+      const minDwell = 90
+
+      if (elapsed < minDwell) {
+        const timer = setTimeout(() => {
+          setActiveKeys(prev => {
+            const next = new Set(prev)
+            next.delete(targetCode)
+            return next
+          })
+          activeKeyReleaseTimeouts.current.delete(targetCode)
+        }, minDwell - elapsed)
+        activeKeyReleaseTimeouts.current.set(targetCode, timer)
+      } else {
+        setActiveKeys(prev => {
+          const next = new Set(prev)
+          next.delete(targetCode)
+          return next
+        })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [handleKeystrokeAction, mode, volume])
+
+  // Click on 3D keycap
+  const handle3DKeyClick = (key: KeyData) => {
+    const keyChar = key.code === 'Space' ? ' ' : (key.label.length === 1 ? key.label : '')
+    const targetCode = key.code
+
+    activeKeyPressTimes.current.set(targetCode, Date.now())
+    setActiveKeys(prev => new Set(prev).add(targetCode))
+    setTimeout(() => {
+      setActiveKeys(prev => {
+        const next = new Set(prev)
+        next.delete(targetCode)
+        return next
+      })
+    }, 120)
+
+    handleKeystrokeAction(key, keyChar || key.label)
+
+    if (mode === 'sandbox') {
+      if (key.code === 'Backspace') {
+        setTypedBuffer(h => h.slice(0, -1))
+      } else if (keyChar) {
+        setTypedBuffer(h => (h + keyChar).slice(-45))
+      }
+    } else if (mode === 'speedtest' && !testCompletedRef.current) {
+      if (!testStartTimeRef.current) {
+        const now = Date.now()
+        testStartTimeRef.current = now
+        setTestStartTime(now)
+      }
+
+      if (key.code === 'Backspace') {
+        testInputRef.current = testInputRef.current.slice(0, -1)
+        setTestInput(testInputRef.current)
+      } else if (keyChar && keyChar.length === 1) {
+        const target = targetParagraphRef.current
+        const currentInput = testInputRef.current
+
+        if (currentInput.length < target.length) {
+          const expectedChar = target[currentInput.length]
+          if (keyChar.toLowerCase() !== expectedChar.toLowerCase()) {
+            errorCountRef.current += 1
+            setErrorCount(errorCountRef.current)
             soundEngine.playErrorSound(volume)
           }
 
-          const nextInput = testInput + e.key
+          const nextInput = currentInput + keyChar
+          testInputRef.current = nextInput
           setTestInput(nextInput)
 
-          // Completed test!
-          if (nextInput.length >= targetParagraph.length) {
-            const timeTaken = (Date.now() - (testStartTime || Date.now())) / 1000
-            const words = targetParagraph.split(' ').length
+          if (nextInput.length >= target.length) {
+            const timeTaken = Math.max(0.2, (Date.now() - (testStartTimeRef.current || Date.now())) / 1000)
+            const words = target.split(' ').length
             const finalWpm = Math.max(1, Math.round((words / timeTaken) * 60))
-            const accuracy = Math.max(0, Math.round(((targetParagraph.length - errorCount) / targetParagraph.length) * 100))
+            const accuracy = Math.max(0, Math.round(((target.length - errorCountRef.current) / target.length) * 100))
 
+            testCompletedRef.current = true
             setTestStats({ wpm: finalWpm, accuracy, time: parseFloat(timeTaken.toFixed(1)) })
             setTestCompleted(true)
 
@@ -147,57 +297,29 @@ export default function App() {
         }
       }
     }
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      setActiveKeys(prev => {
-        const next = new Set(prev)
-        next.delete(e.code)
-        return next
-      })
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-    }
-  }, [handleKeystrokeAction, mode, testInput, targetParagraph, testStartTime, testCompleted, errorCount, volume])
-
-  // Click on 3D keycap
-  const handle3DKeyClick = (key: KeyData) => {
-    setActiveKeys(prev => {
-      const next = new Set(prev)
-      next.add(key.code)
-      return next
-    })
-
-    handleKeystrokeAction(key, key.label)
-
-    if (key.label.length === 1) {
-      setTypedBuffer(h => (h + key.label).slice(-45))
-    }
-
-    setTimeout(() => {
-      setActiveKeys(prev => {
-        const next = new Set(prev)
-        next.delete(key.code)
-        return next
-      })
-    }, 120)
   }
 
   // Restart Speed Test
-  const resetSpeedTest = () => {
-    const randomIdx = Math.floor(Math.random() * TYPING_TEST_PARAGRAPHS.length)
-    setTargetParagraph(TYPING_TEST_PARAGRAPHS[randomIdx])
+  const resetSpeedTest = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    setTargetParagraph(current => {
+      const candidates = TYPING_TEST_PARAGRAPHS.filter(p => p !== current)
+      const nextP = candidates[Math.floor(Math.random() * candidates.length)] || TYPING_TEST_PARAGRAPHS[0]
+      targetParagraphRef.current = nextP
+      return nextP
+    })
+    testInputRef.current = ''
     setTestInput('')
+    testStartTimeRef.current = null
     setTestStartTime(null)
+    testCompletedRef.current = false
     setTestCompleted(false)
     setTestStats(null)
+    errorCountRef.current = 0
     setErrorCount(0)
-  }
+  }, [])
 
   const currentSwitch = SWITCH_PROFILES[activeSwitch]
   const currentMod = ACOUSTIC_MODS[activeMod]
@@ -227,10 +349,14 @@ export default function App() {
           </div>
         </div>
 
-        {/* Mode Selector Tabs */}
+          {/* Mode Selector Tabs */}
         <div className="flex items-center bg-gray-900 border border-gray-800 rounded-xl p-1 gap-1">
           <button
-            onClick={() => setMode('sandbox')}
+            tabIndex={-1}
+            onClick={(e) => {
+              e.currentTarget.blur()
+              setMode('sandbox')
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
               mode === 'sandbox' ? 'bg-cyan-500/20 text-cyan-300 shadow-sm' : 'text-gray-400 hover:text-white'
             }`}
@@ -239,7 +365,9 @@ export default function App() {
             Sandbox
           </button>
           <button
-            onClick={() => {
+            tabIndex={-1}
+            onClick={(e) => {
+              e.currentTarget.blur()
               setMode('speedtest')
               resetSpeedTest()
             }}
@@ -323,7 +451,11 @@ export default function App() {
                   Type the passage below:
                 </span>
                 <button
-                  onClick={resetSpeedTest}
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.currentTarget.blur()
+                    resetSpeedTest()
+                  }}
                   className="text-gray-400 hover:text-cyan-400 flex items-center gap-1 transition-colors"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -331,18 +463,21 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Character by character stream */}
-              <div className="p-4 rounded-xl bg-gray-900/80 border border-gray-800/80 font-mono text-base tracking-wide leading-relaxed">
+              {/* Character by character stream with visible whitespace support */}
+              <div className="p-4 rounded-xl bg-gray-900/80 border border-gray-800/80 font-mono text-base tracking-wide leading-relaxed whitespace-pre-wrap select-none min-h-[5.5rem]">
                 {targetParagraph.split('').map((char, index) => {
                   let colorClass = 'text-gray-500'
+                  const isCurrent = index === testInput.length
+
                   if (index < testInput.length) {
-                    colorClass = testInput[index] === char ? 'text-green-400 font-bold' : 'text-red-400 underline bg-red-500/20'
-                  } else if (index === testInput.length) {
-                    colorClass = 'text-white border-b-2 border-cyan-400 animate-pulse'
+                    colorClass = testInput[index] === char ? 'text-green-400 font-bold' : 'text-red-400 bg-red-500/25 rounded px-0.5'
+                  } else if (isCurrent) {
+                    colorClass = 'text-cyan-300 bg-cyan-500/20 rounded px-0.5 border-b-2 border-cyan-400 animate-pulse'
                   }
+
                   return (
-                    <span key={index} className={colorClass}>
-                      {char}
+                    <span key={index} className={`${colorClass} transition-colors inline-block`}>
+                      {char === ' ' ? (isCurrent ? '␣' : ' ') : char}
                     </span>
                   )
                 })}
@@ -365,7 +500,11 @@ export default function App() {
                     </div>
                   </div>
                   <button
-                    onClick={resetSpeedTest}
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
+                      resetSpeedTest()
+                    }}
                     className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs rounded-lg transition-colors flex items-center gap-1"
                   >
                     <Play className="w-3 h-3 fill-current" /> Next
@@ -394,7 +533,11 @@ export default function App() {
               />
             </div>
             <button
-              onClick={() => setExplodeAmount(explodeAmount > 0.1 ? 0 : 0.85)}
+              tabIndex={-1}
+              onClick={(e) => {
+                e.currentTarget.blur()
+                setExplodeAmount(explodeAmount > 0.1 ? 0 : 0.85)
+              }}
               className="text-[11px] px-2 py-1 bg-gray-800 hover:bg-gray-700 text-cyan-300 rounded font-mono transition-colors"
             >
               {explodeAmount > 0.1 ? 'Assemble' : 'Explode'}
@@ -423,7 +566,9 @@ export default function App() {
                 return (
                   <button
                     key={st}
-                    onClick={() => {
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
                       setActiveSwitch(st)
                       soundEngine.playSwitch(st, volume, false, activeMod)
                     }}
@@ -466,7 +611,9 @@ export default function App() {
                 return (
                   <button
                     key={m}
-                    onClick={() => {
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
                       setActiveMod(m)
                       soundEngine.playSwitch(activeSwitch, volume, false, m)
                     }}
@@ -497,7 +644,11 @@ export default function App() {
                 return (
                   <button
                     key={m}
-                    onClick={() => setRgbMode(m)}
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
+                      setRgbMode(m)
+                    }}
                     className={`py-1.5 px-2 text-center rounded-lg border text-xs capitalize transition-all ${
                       isSelected
                         ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-semibold'
@@ -520,7 +671,11 @@ export default function App() {
 
             <div className="flex gap-2">
               <button
-                onClick={() => setArtisanEsc('gemstone')}
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.currentTarget.blur()
+                  setArtisanEsc('gemstone')
+                }}
                 className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                   artisanEsc === 'gemstone'
                     ? 'bg-fuchsia-500/20 border-fuchsia-500 text-fuchsia-300 font-semibold'
@@ -530,7 +685,11 @@ export default function App() {
                 💎 Cyber Crystal
               </button>
               <button
-                onClick={() => setArtisanEsc('standard')}
+                tabIndex={-1}
+                onClick={(e) => {
+                  e.currentTarget.blur()
+                  setArtisanEsc('standard')
+                }}
                 className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                   artisanEsc === 'standard'
                     ? 'bg-gray-800 border-gray-600 text-white font-semibold'
@@ -555,7 +714,11 @@ export default function App() {
                 return (
                   <button
                     key={c.id}
-                    onClick={() => setActiveColorway(c)}
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.currentTarget.blur()
+                      setActiveColorway(c)
+                    }}
                     className={`w-full p-2 rounded-xl border flex items-center justify-between transition-all ${
                       isSelected
                         ? 'bg-gray-900 border-purple-500/50 shadow-md shadow-purple-500/10'

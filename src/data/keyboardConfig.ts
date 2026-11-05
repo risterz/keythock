@@ -101,6 +101,10 @@ export const TYPING_TEST_PARAGRAPHS = [
   "High quality keycaps molded with thick PBT plastic resist shine and deliver crisp acoustic resonance."
 ]
 
+export const UNIT_SIZE = 0.92
+export const KEY_GAP = 0.06
+export const ROW_Z_OFFSETS = [-2.1, -1.05, 0, 1.05, 2.1]
+
 // 60% Compact Keyboard Layout Matrix
 export const KEYBOARD_LAYOUT: KeyData[] = [
   // Row 0
@@ -173,3 +177,93 @@ export const KEYBOARD_LAYOUT: KeyData[] = [
   { id: 'MetaRight', code: 'MetaRight', label: 'FN', width: 1.25, row: 4, col: 5, isModifier: true },
   { id: 'ControlRight', code: 'ControlRight', label: 'CTRL', width: 1.25, row: 4, col: 6, isModifier: true }
 ]
+
+export interface Key3DPosition {
+  key: KeyData
+  x: number
+  z: number
+  width: number
+}
+
+// Compute accurate 3D positions for every key
+export function computeKey3DPositions(): Key3DPosition[] {
+  const positions: Key3DPosition[] = []
+  const rows = [0, 1, 2, 3, 4]
+
+  rows.forEach(r => {
+    const keysInRow = KEYBOARD_LAYOUT.filter(k => k.row === r)
+    let currentX = -7.0
+
+    keysInRow.forEach(k => {
+      const keyWidth = k.width * UNIT_SIZE + (k.width - 1) * KEY_GAP
+      const posX = currentX + keyWidth / 2
+      positions.push({
+        key: k,
+        x: posX,
+        z: ROW_Z_OFFSETS[r],
+        width: keyWidth
+      })
+      currentX += keyWidth + KEY_GAP
+    })
+  })
+
+  return positions
+}
+
+export const KEY_3D_POSITIONS = computeKey3DPositions()
+
+export const KEY_POSITION_MAP = new Map<string, Key3DPosition>()
+KEY_3D_POSITIONS.forEach(pos => {
+  KEY_POSITION_MAP.set(pos.key.code, pos)
+  KEY_POSITION_MAP.set(pos.key.id, pos)
+})
+
+export const KEY_CODE_MAP = new Map<string, KeyData>()
+KEYBOARD_LAYOUT.forEach(k => {
+  KEY_CODE_MAP.set(k.code, k)
+  KEY_CODE_MAP.set(k.id, k)
+})
+
+// Lookup key data by KeyboardEvent code or key character
+export function findKeyData(code: string, key?: string): KeyData | undefined {
+  if (KEY_CODE_MAP.has(code)) {
+    return KEY_CODE_MAP.get(code)
+  }
+  if (key) {
+    if (key === ' ') return KEY_CODE_MAP.get('Space')
+    const upper = key.toUpperCase()
+    if (KEY_CODE_MAP.has(`Key${upper}`)) return KEY_CODE_MAP.get(`Key${upper}`)
+    if (KEY_CODE_MAP.has(`Digit${upper}`)) return KEY_CODE_MAP.get(`Digit${upper}`)
+
+    // Common symbol mapping
+    const symbolMap: Record<string, string> = {
+      '-': 'Minus',
+      '_': 'Minus',
+      '=': 'Equal',
+      '+': 'Equal',
+      '[': 'BracketLeft',
+      '{': 'BracketLeft',
+      ']': 'BracketRight',
+      '}': 'BracketRight',
+      '\\': 'Backslash',
+      '|': 'Backslash',
+      ';': 'Semicolon',
+      ':': 'Semicolon',
+      "'": 'Quote',
+      '"': 'Quote',
+      ',': 'Comma',
+      '<': 'Comma',
+      '.': 'Period',
+      '>': 'Period',
+      '/': 'Slash',
+      '?': 'Slash'
+    }
+    if (symbolMap[key] && KEY_CODE_MAP.has(symbolMap[key])) {
+      return KEY_CODE_MAP.get(symbolMap[key])
+    }
+
+    const byLabel = KEYBOARD_LAYOUT.find(k => k.label.toUpperCase() === upper)
+    if (byLabel) return byLabel
+  }
+  return undefined
+}
